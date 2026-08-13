@@ -1,0 +1,9 @@
+﻿name,age,salary,department,hire_date,active
+Alice,30,75000,Engineering,2020-01-15,true
+Bob,25,55000,Marketing,2021-03-22,true
+Carol,35,90000,Engineering,2019-07-01,true
+Dave,28,60000,HR,2022-02-10,false
+Eve,32,80000,Engineering,2020-09-05,true
+Frank,,45000,Marketing,2021-11-30,true
+Grace,29,70000,Engineering,2023-01-20,true
+Henry,45,120000,Management,2015-06-15,true
