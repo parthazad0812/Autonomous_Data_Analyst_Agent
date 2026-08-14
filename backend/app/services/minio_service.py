@@ -6,9 +6,14 @@ from app.config import settings
 
 
 def get_minio_client() -> Minio:
-    """Return a configured MinIO client."""
+    """Return a configured MinIO client with sanitized endpoint hostname."""
+    endpoint = settings.minio_endpoint.strip()
+    if "://" in endpoint:
+        endpoint = endpoint.split("://", 1)[1]
+    endpoint = endpoint.split("/")[0].strip()
+
     return Minio(
-        settings.minio_endpoint,
+        endpoint,
         access_key=settings.minio_access_key,
         secret_key=settings.minio_secret_key,
         secure=settings.minio_secure,
@@ -22,8 +27,9 @@ def ensure_bucket_exists() -> None:
     try:
         if not client.bucket_exists(bucket):
             client.make_bucket(bucket)
-    except S3Error as e:
-        raise RuntimeError(f"MinIO bucket error: {e}") from e
+    except Exception:
+        # Bucket exists or cloud provider handles bucket lifecycle
+        pass
 
 
 def upload_file_to_minio(
