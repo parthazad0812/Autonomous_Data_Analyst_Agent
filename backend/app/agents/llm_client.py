@@ -1,8 +1,7 @@
 """
-LLM client wrapper — returns a LangChain model with multi-provider fallback chain.
-Primary model: Groq (openai/gpt-oss-120b)
-Fallback 1: Google Gemini (gemini-3.5-flash)
-Fallback 2: Groq (llama-3.3-70b-versatile)
+LLM client wrapper — returns a LangChain model with fallback chain.
+Primary model: Groq (llama-3.3-70b-versatile)
+Fallback model: Google Gemini (gemini-3.5-flash)
 """
 
 import logging
@@ -16,42 +15,13 @@ logger = logging.getLogger(__name__)
 
 def _make_llm(temperature: float = 0.1) -> Any:
     """
-    Build an LLM client with multi-provider fallback chain:
-    1. Groq (openai/gpt-oss-120b)
-    2. Google Gemini (gemini-3.5-flash)
-    3. Groq (llama-3.3-70b-versatile)
+    Build an LLM client with fallback chain:
+    1. Primary: Groq (llama-3.3-70b-versatile)
+    2. Fallback: Google Gemini (gemini-3.5-flash)
     """
     candidates = []
 
-    # 1. Groq Primary: openai/gpt-oss-120b
-    if settings.groq_api_key:
-        try:
-            candidates.append(
-                ChatGroq(
-                    model_name="openai/gpt-oss-120b",
-                    groq_api_key=settings.groq_api_key,
-                    temperature=temperature,
-                    max_tokens=8192,
-                )
-            )
-        except Exception as e:
-            logger.warning(f"Could not init Groq gpt-oss-120b model: {e}")
-
-    # 2. Google Gemini
-    if settings.gemini_api_key:
-        try:
-            candidates.append(
-                ChatGoogleGenerativeAI(
-                    model=settings.default_model if "gemini" in settings.default_model else "gemini-3.5-flash",
-                    google_api_key=settings.gemini_api_key,
-                    temperature=temperature,
-                    max_output_tokens=8192,
-                )
-            )
-        except Exception as e:
-            logger.warning(f"Could not init Gemini model: {e}")
-
-    # 3. Groq Fallback: llama-3.3-70b-versatile
+    # 1. Groq Primary: llama-3.3-70b-versatile
     if settings.groq_api_key:
         try:
             candidates.append(
@@ -64,6 +34,20 @@ def _make_llm(temperature: float = 0.1) -> Any:
             )
         except Exception as e:
             logger.warning(f"Could not init Groq llama-3.3-70b-versatile model: {e}")
+
+    # 2. Fallback: Google Gemini (gemini-3.5-flash)
+    if settings.gemini_api_key:
+        try:
+            candidates.append(
+                ChatGoogleGenerativeAI(
+                    model="gemini-3.5-flash",
+                    google_api_key=settings.gemini_api_key,
+                    temperature=temperature,
+                    max_output_tokens=8192,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Could not init Gemini model: {e}")
 
     if not candidates:
         # Default fallback if no API keys are provided in environment

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     openai_api_key: str = ""
     default_llm_provider: str = "groq"
-    default_model: str = "openai/gpt-oss-120b"
+    default_model: str = "llama-3.3-70b-versatile"
 
     # ── Database ─────────────────────────────────────────────────────────────
     database_url: str = "postgresql://analyst:analyst_password@localhost:5432/data_analyst"
