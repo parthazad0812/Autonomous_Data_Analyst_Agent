@@ -1,3 +1,4 @@
+from typing import Any
 from pydantic import field_validator
 # pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -57,7 +58,7 @@ class Settings(BaseSettings):
     next_public_ws_url: str = "ws://localhost:8000/ws"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    allowed_origins: list[str] = [
+    allowed_origins: Any = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
@@ -66,11 +67,17 @@ class Settings(BaseSettings):
     @classmethod
     def parse_allowed_origins(cls, v):
         if isinstance(v, str):
-            if v.startswith("["):
+            v_str = v.strip()
+            if v_str.startswith("["):
                 import json
-                return json.loads(v)
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v_str.split(",") if origin.strip()]
+        if isinstance(v, list):
+            return v
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
 @lru_cache()
