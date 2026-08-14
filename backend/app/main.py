@@ -31,12 +31,27 @@ from app.api import websocket
 log = get_logger(__name__)
 
 
-# ── Rate limiter (Redis-backed) ───────────────────────────────────────────────
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri=settings.redis_url,
-    default_limits=[settings.rate_limit_default],
-)
+# ── Rate limiter (Redis-backed with in-memory fallback) ───────────────────────
+def _build_limiter() -> Limiter:
+    """Build rate limiter; falls back to in-memory if Redis is unreachable."""
+    try:
+        import redis as _redis
+        r = _redis.from_url(settings.redis_url, socket_connect_timeout=2)
+        r.ping()
+        r.close()
+        return Limiter(
+            key_func=get_remote_address,
+            storage_uri=settings.redis_url,
+            default_limits=[settings.rate_limit_default],
+        )
+    except Exception:
+        log.warning("Redis unavailable — rate limiter using in-memory storage")
+        return Limiter(
+            key_func=get_remote_address,
+            default_limits=[settings.rate_limit_default],
+        )
+
+limiter = _build_limiter()
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────

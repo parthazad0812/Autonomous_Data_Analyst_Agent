@@ -3,19 +3,21 @@ WebSocket Manager + FastAPI WebSocket endpoint.
 
 Architecture:
   1. Client connects to ws://localhost:8000/ws/analysis/{session_id}
-  2. Client authenticates with a token as the first message
-  3. Redis pub/sub subscribes to channel "analysis:{session_id}"
-  4. Analysis service publishes events to that channel
-  5. WS handler forwards events to the browser in real-time
+  2. Redis pub/sub subscribes to channel "analysis:{session_id}" (if Redis available)
+  3. Analysis service publishes events to that channel
+  4. WS handler forwards events to the browser in real-time
+  5. Falls back to in-memory broadcast when Redis is unavailable
 """
 
 import json
 import asyncio
+import logging
 from typing import Dict, Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from redis.asyncio import Redis as AsyncRedis
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["WebSocket"])
 
@@ -54,6 +56,18 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _redis_available() -> bool:
+    """Check if Redis is reachable (non-blocking, cached-ish check)."""
+    try:
+        import redis as sync_redis
+        r = sync_redis.from_url(settings.redis_url, socket_connect_timeout=2)
+        r.ping()
+        r.close()
+        return True
+    except Exception:
+        return False
+
+
 @router.websocket("/ws/analysis/{session_id}")
 async def analysis_websocket(
     websocket: WebSocket,
@@ -62,73 +76,121 @@ async def analysis_websocket(
     """
     WebSocket endpoint. Subscribes to Redis pub/sub channel
     'analysis:{session_id}' and forwards all events to the client.
+    Falls back to in-memory broadcast if Redis is unavailable.
     """
     await manager.connect(websocket, session_id)
-    redis = AsyncRedis.from_url(settings.redis_url, decode_responses=True)
-    pubsub = redis.pubsub()
-    channel = f"analysis:{session_id}"
-    await pubsub.subscribe(channel)
+
+    # Send immediate confirmation
+    await websocket.send_json({
+        "type": "connected",
+        "session_id": session_id,
+        "message": "Connected to analysis stream",
+    })
+
+    redis = None
+    pubsub = None
+    use_redis = False
 
     try:
-        # Send immediate confirmation
-        await websocket.send_json({
-            "type": "connected",
-            "session_id": session_id,
-            "message": "Connected to analysis stream",
-        })
+        # Try to connect to Redis for pub/sub
+        try:
+            from redis.asyncio import Redis as AsyncRedis
+            redis = AsyncRedis.from_url(settings.redis_url, decode_responses=True)
+            await redis.ping()
+            pubsub = redis.pubsub()
+            channel = f"analysis:{session_id}"
+            await pubsub.subscribe(channel)
+            use_redis = True
+        except Exception as e:
+            logger.warning(f"Redis unavailable for WebSocket pub/sub: {e}. Using in-memory fallback.")
+            use_redis = False
 
-        # Listen for Redis messages and forward to client
-        async def redis_listener():
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    try:
-                        data = json.loads(message["data"])
-                        await manager.broadcast(session_id, data)
-                    except (json.JSONDecodeError, Exception):
-                        pass
+        if use_redis and pubsub:
+            # Listen for Redis messages and forward to client
+            async def redis_listener():
+                async for message in pubsub.listen():
+                    if message["type"] == "message":
+                        try:
+                            data = json.loads(message["data"])
+                            await manager.broadcast(session_id, data)
+                        except (json.JSONDecodeError, Exception):
+                            pass
 
-        # Also handle client disconnects
-        async def ws_listener():
+            # Also handle client disconnects
+            async def ws_listener():
+                try:
+                    while True:
+                        msg = await websocket.receive_text()
+                except WebSocketDisconnect:
+                    pass
+
+            await asyncio.gather(
+                redis_listener(),
+                ws_listener(),
+                return_exceptions=True,
+            )
+        else:
+            # In-memory fallback: just keep the connection alive
+            # Events will be pushed via manager.broadcast() directly
             try:
                 while True:
-                    # Heartbeat: accept any message from client (ping)
                     msg = await websocket.receive_text()
             except WebSocketDisconnect:
                 pass
 
-        # Run both listeners concurrently until client disconnects
-        await asyncio.gather(
-            redis_listener(),
-            ws_listener(),
-            return_exceptions=True,
-        )
-
     except WebSocketDisconnect:
         pass
     finally:
-        await pubsub.unsubscribe(channel)
-        await pubsub.aclose()
-        await redis.aclose()
+        if pubsub:
+            try:
+                await pubsub.unsubscribe(f"analysis:{session_id}")
+                await pubsub.aclose()
+            except Exception:
+                pass
+        if redis:
+            try:
+                await redis.aclose()
+            except Exception:
+                pass
         manager.disconnect(websocket, session_id)
 
 
 async def publish_event(session_id: str, event: dict) -> None:
     """
     Publish an event to the Redis channel for this session.
-    Called by the analysis service from a background thread.
+    Falls back to in-memory broadcast if Redis is unavailable.
     """
-    redis = AsyncRedis.from_url(settings.redis_url, decode_responses=True)
     try:
-        await redis.publish(f"analysis:{session_id}", json.dumps(event))
-    finally:
-        await redis.aclose()
+        from redis.asyncio import Redis as AsyncRedis
+        redis = AsyncRedis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            await redis.publish(f"analysis:{session_id}", json.dumps(event))
+        finally:
+            await redis.aclose()
+    except Exception:
+        # Fallback: broadcast directly via manager (works for single-process deployments)
+        await manager.broadcast(session_id, event)
 
 
 def publish_event_sync(session_id: str, event: dict) -> None:
     """Synchronous wrapper for publishing events from non-async code."""
-    import redis as sync_redis
-    r = sync_redis.from_url(settings.redis_url, decode_responses=True)
     try:
-        r.publish(f"analysis:{session_id}", json.dumps(event))
-    finally:
-        r.close()
+        import redis as sync_redis
+        r = sync_redis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            r.publish(f"analysis:{session_id}", json.dumps(event))
+        finally:
+            r.close()
+    except Exception:
+        # If Redis is unavailable, try in-memory broadcast via asyncio event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(manager.broadcast(session_id, event))
+            else:
+                loop.run_until_complete(manager.broadcast(session_id, event))
+        except Exception:
+            # Last resort: log and continue — don't crash the analysis pipeline
+            logger.warning(
+                f"Could not publish WebSocket event for session {session_id}: Redis unavailable and no event loop"
+            )

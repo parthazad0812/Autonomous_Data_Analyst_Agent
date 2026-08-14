@@ -23,6 +23,15 @@ import matplotlib
 matplotlib.use('Agg')   # non-interactive backend — MUST come before pyplot import
 import matplotlib.pyplot as plt
 import seaborn as sns
+try:
+    import scipy.stats
+except ImportError:
+    pass
+try:
+    import statsmodels.api
+    import statsmodels.formula.api
+except ImportError:
+    pass
 warnings.filterwarnings('ignore')
 
 # ── Load dataset ──────────────────────────────────────────────────────────────

@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     # ── LLM ─────────────────────────────────────────────────────────────────
     groq_api_key: str = ""
     gemini_api_key: str = ""
-    openai_api_key: str = ""
     default_llm_provider: str = "gemini"
     default_model: str = "gemini-3.5-flash"
 

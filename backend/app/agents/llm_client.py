@@ -50,11 +50,8 @@ def _make_llm(temperature: float = 0.1) -> Any:
             logger.warning(f"Could not init Groq llama-3.3-70b-versatile model: {e}")
 
     if not candidates:
-        # Default fallback if no API keys are provided in environment
-        return ChatGoogleGenerativeAI(
-            model="gemini-3.5-flash",
-            google_api_key=settings.gemini_api_key or "mock-key",
-            temperature=temperature,
+        raise RuntimeError(
+            "No LLM API keys configured. Set GEMINI_API_KEY and/or GROQ_API_KEY in environment variables."
         )
 
     primary = candidates[0]

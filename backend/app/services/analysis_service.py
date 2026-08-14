@@ -129,21 +129,40 @@ def run_analysis(session_id: str) -> None:
         local_dataset_path = download_dataset_to_temp(session.dataset_path)
         charts_dir = make_charts_temp_dir(session_id)
 
-        # ── 3. Build the dataset profile (reuse from session metadata) ─────────
-        # We use the metadata already stored from Phase 3 upload
-        # For the agents, we reconstruct a minimal profile dict
-        profile = {
-            "rows": session.dataset_rows or 0,
-            "columns": session.dataset_columns or 0,
-            "column_names": [],   # agents will rediscover
-            "numeric_cols": [],
-            "text_cols": [],
-            "datetime_cols": [],
-            "has_nulls": False,
-            "memory_mb": 0.0,
-            "sample_rows": [],
-            "columns_meta": [],
-        }
+        # ── 3. Build the dataset profile by re-profiling the temp file ─────────
+        # Re-profile the downloaded file to provide full column metadata to agents
+        try:
+            import pandas as pd
+            ext = os.path.splitext(local_dataset_path)[1].lower()
+            if ext == ".csv":
+                df = pd.read_csv(local_dataset_path, low_memory=False)
+            elif ext in (".xlsx", ".xls"):
+                df = pd.read_excel(local_dataset_path, engine="openpyxl")
+            elif ext == ".json":
+                df = pd.read_json(local_dataset_path)
+            elif ext == ".parquet":
+                df = pd.read_parquet(local_dataset_path)
+            else:
+                df = pd.read_csv(local_dataset_path, low_memory=False)
+
+            from app.services.upload_service import profile_dataframe
+            profile = profile_dataframe(df)
+            del df  # free memory
+        except Exception as profile_err:
+            _publish(session_id, "orchestrator", "running",
+                     f"Could not re-profile dataset: {profile_err}. Using minimal metadata.")
+            profile = {
+                "rows": session.dataset_rows or 0,
+                "columns": session.dataset_columns or 0,
+                "column_names": [],
+                "numeric_cols": [],
+                "text_cols": [],
+                "datetime_cols": [],
+                "has_nulls": False,
+                "memory_mb": 0.0,
+                "sample_rows": [],
+                "columns_meta": [],
+            }
 
         # ── 4. Build initial LangGraph state ───────────────────────────────────
         initial_state: AnalysisState = {

@@ -4,7 +4,7 @@ Synthesizes all findings into a comprehensive Markdown report.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.state import AnalysisState
@@ -91,7 +91,7 @@ def _generate_fallback_report(state: AnalysisState, findings_text: str, duration
     profile = state.get("dataset_profile", {})
     return f"""# {state.get("dataset_filename", "Dataset")} — Analytical Report
 
-**Generated**: {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
+**Generated**: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
 **Dataset**: {profile.get("rows", "?")} rows × {profile.get("columns", "?")} columns
 **Analysis Duration**: {duration:.1f}s
 **User Query**: {state.get("user_query", "N/A")}

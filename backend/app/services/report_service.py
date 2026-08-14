@@ -16,7 +16,7 @@ from __future__ import annotations
 import base64
 import io
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.services.minio_service import get_minio_client
@@ -209,7 +209,7 @@ def generate_pdf(
     story.append(Spacer(1, 6))
 
     meta_text = (
-        f"<b>Generated:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}   "
+        f"<b>Generated:</b> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}   "
         f"<b>Dataset:</b> {filename}   "
         f"<b>Findings:</b> {findings_count}"
     )
