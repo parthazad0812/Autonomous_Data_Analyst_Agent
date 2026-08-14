@@ -30,8 +30,9 @@ export function useAnalysisStream({ sessionId, enabled, onEvent }: UseAnalysisSt
   }, [onEvent]);
 
   const connect = useCallback(() => {
-    if (!enabled || !sessionId) return;
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000"}/ws/analysis/${sessionId}`;
+    const rawWsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+    const baseUrl = rawWsUrl.replace(/\/ws\/?$/, "").replace(/\/$/, "");
+    const wsUrl = `${baseUrl}/ws/analysis/${sessionId}`;
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => setConnected(true);
