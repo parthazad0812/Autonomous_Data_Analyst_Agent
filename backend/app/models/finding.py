@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import String, Text, DateTime, ForeignKey, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.database import Base
 
@@ -23,7 +22,7 @@ class Finding(Base):
     # statistical | visual | anomaly | correlation | hypothesis
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    evidence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     confidence: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # high | medium | low
     hypothesis: Mapped[str | None] = mapped_column(Text, nullable=True)

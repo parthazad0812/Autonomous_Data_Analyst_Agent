@@ -17,13 +17,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash");
   const [saved, setSaved] = useState(false);
-  const [profileName, setProfileName] = useState("");
-
-  useEffect(() => {
-    if (user?.full_name) {
-      setProfileName(user.full_name);
-    }
-  }, [user]);
+  const [profileName, setProfileName] = useState(user?.full_name ?? "");
 
   useEffect(() => {
     const stored = localStorage.getItem("preferred_model");

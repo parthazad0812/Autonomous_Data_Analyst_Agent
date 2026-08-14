@@ -12,7 +12,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   const { toasts, addToast, dismissToast } = useToastManager();
@@ -20,7 +19,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    setMounted(true);
     if (!auth.isAuthenticated()) {
       router.replace("/login");
     }
@@ -29,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Close mobile menu on nav
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
-  const user = mounted ? auth.getUser() : null;
+  const user = auth.getUser();
 
   function handleLogout() {
     auth.clearSession();

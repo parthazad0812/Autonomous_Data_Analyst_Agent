@@ -47,13 +47,7 @@ function formatDate(iso: string) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const user = mounted ? auth.getUser() : null;
+  const user = auth.getUser();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [query, setQuery] = useState("");

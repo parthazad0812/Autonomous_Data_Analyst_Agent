@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Numeric, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Numeric, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.database import Base
 
@@ -21,8 +20,8 @@ class AgentStep(Base):
     status: Mapped[str] = mapped_column(String(50), default="running")
     # running | completed | failed | skipped
 
-    input_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    output_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    input_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    output_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     code_executed: Mapped[str | None] = mapped_column(Text, nullable=True)
     code_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

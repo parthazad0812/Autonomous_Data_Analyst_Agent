@@ -68,8 +68,8 @@
 #  Step 3: Run database migrations
 #    alembic upgrade head
 #
-#  Step 4: Start the API server (with hot-reload and Windows crash fix)
-#    python run_dev.py
+#  Step 4: Start the API server (with hot-reload)
+#    uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 #
 #  The API will be available at:
 #    http://localhost:8000
@@ -79,7 +79,7 @@
 #  --- Running WITHOUT activating venv (alternative) ---
 #
 #  From the backend/ directory, you can also run directly:
-#    .\venv\Scripts\python.exe run_dev.py
+#    .\venv\Scripts\uvicorn.exe app.main:app --reload --host 127.0.0.1 --port 8000
 #    .\venv\Scripts\alembic.exe upgrade head
 
 
@@ -123,7 +123,7 @@
 #    cd backend
 #    .\venv\Scripts\Activate
 #    alembic upgrade head
-#    python run_dev.py
+#    uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 #
 #  Terminal 3 — Start frontend:
 #    cd frontend
@@ -224,7 +224,7 @@
 #  To run with debug-level logging:
 #    cd backend
 #    .\venv\Scripts\Activate
-#    python run_dev.py
+#    uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 --log-level debug
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -269,3 +269,28 @@
 #
 #  "Upload fails with 413 or timeout"
 #    → File may exceed MAX_UPLOAD_SIZE_MB (default: 500MB) in backend/.env
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  8. TESTING & PRODUCTION DEPLOYMENT (Phase 8)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  --- Run Automated Backend Test Suite (Pytest) ---
+#    cd backend
+#    .\venv\Scripts\Activate
+#    pytest tests/ -v
+#
+#  --- Run Frontend Build Check ---
+#    cd frontend
+#    npx tsc --noEmit
+#    npm run build
+#
+#  --- Run Production Docker Compose Stack ---
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#
+#  --- Railway / Vercel Cloud Deployment ---
+#  Backend (Railway):
+#    Connect GitHub repo → Railway auto-detects backend/Dockerfile & railway.toml
+#  Frontend (Vercel):
+#    cd frontend && npx vercel --prod
+

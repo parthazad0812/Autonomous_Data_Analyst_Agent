@@ -61,9 +61,7 @@ def _make_page_number_canvas(canvas_class):
             self._saved_page_states: list = []
 
         def showPage(self):
-            state = dict(self.__dict__)
-            state.pop('_saved_page_states', None)
-            self._saved_page_states.append(state)
+            self._saved_page_states.append(dict(self.__dict__))
             self._startPage()
 
         def save(self):
@@ -86,56 +84,6 @@ def _make_page_number_canvas(canvas_class):
             )
 
     return NumberedCanvas
-
-
-# ── Markdown Parser Utilities ─────────────────────────────────────────────────
-
-def safe_inline(text: str) -> str:
-    """
-    Apply inline markdown formatting safely for ReportLab.
-    Protects inline code spans first so underscores/asterisks inside code
-    don't create corrupt nested XML tags.
-    """
-    # 1. Protect inline code spans with placeholder tokens
-    code_spans: list[str] = []
-    def save_code(match):
-        code_spans.append(match.group(1))
-        return f"___CODE_SPAN_{len(code_spans) - 1}___"
-
-    text = re.sub(r"`([^`]+)`", save_code, text)
-
-    # 2. Escape XML special characters
-    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    # 3. Bold (**text** or __text__)
-    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-
-    # 4. Italic (*text* or _text_ at word boundaries)
-    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-    # Only match _italic_ if bounded by spaces/non-word chars to avoid snake_case column names
-    text = re.sub(r"(?<=^|\s)_([^\s_].*?[^\s_])_(?=\s|$|[.,!?;:])", r"<i>\1</i>", text)
-
-    # 5. Restore inline code spans with ReportLab <font> tag
-    for i, code in enumerate(code_spans):
-        escaped_code = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        font_tag = f'<font name="Courier" size="8" color="#4f46e5">{escaped_code}</font>'
-        text = text.replace(f"___CODE_SPAN_{i}___", font_tag)
-
-    return text
-
-
-def make_paragraph(text: str, style):
-    """
-    Safely construct a ReportLab Paragraph.
-    If XML parsing fails due to unexpected formatting, falls back to plain escaped text.
-    """
-    from reportlab.platypus import Paragraph
-    try:
-        formatted = safe_inline(text)
-        return Paragraph(formatted, style)
-    except Exception:
-        clean = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return Paragraph(clean, style)
 
 
 # ── Main PDF generator ────────────────────────────────────────────────────────
@@ -224,14 +172,6 @@ def generate_pdf(
         fontName="Helvetica-Oblique", fontSize=10, textColor=MUTED,
         spaceAfter=8, leading=15, leftIndent=20,
     )
-    s_th = ps("RTH",
-        fontName="Helvetica-Bold", fontSize=9, textColor=WHITE,
-        leading=12, alignment=TA_LEFT,
-    )
-    s_td = ps("RTD",
-        fontName="Helvetica", fontSize=9, textColor=BODY,
-        leading=13, alignment=TA_LEFT,
-    )
 
     # ── Buffer + doc ──────────────────────────────────────────────────────────
     buffer = io.BytesIO()
@@ -251,8 +191,9 @@ def generate_pdf(
     story: list = []
 
     # ── Cover header ──────────────────────────────────────────────────────────
+    # Gradient-effect header table
     header_data = [[
-        make_paragraph(f"📊 {title}", s_title),
+        Paragraph(f"📊 {title}", s_title),
     ]]
     header_table = Table(header_data, colWidths=[W])
     header_table.setStyle(TableStyle([
@@ -272,77 +213,38 @@ def generate_pdf(
         f"<b>Dataset:</b> {filename}   "
         f"<b>Findings:</b> {findings_count}"
     )
-    story.append(make_paragraph(meta_text, s_meta))
+    story.append(Paragraph(meta_text, s_meta))
     story.append(HRFlowable(width=W, thickness=1, color=BORDER, spaceAfter=16))
 
     # ── Markdown parser ───────────────────────────────────────────────────────
     in_code   = False
     code_buf: list[str] = []
-    table_buf: list[str] = []
 
     def flush_code():
         nonlocal in_code, code_buf
         if code_buf:
             text = "\n".join(code_buf).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            story.append(make_paragraph(text.replace("\n", "<br/>"), s_code))
+            story.append(Paragraph(text.replace("\n", "<br/>"), s_code))
             story.append(Spacer(1, 4))
         code_buf = []
         in_code = False
 
-    def flush_table():
-        nonlocal table_buf
-        if not table_buf:
-            return
-        
-        parsed_rows: list[list[str]] = []
-        for row_str in table_buf:
-            cells = [c.strip() for c in row_str.strip("|").split("|")]
-            # Ignore divider rows like |---|---|
-            if all(re.match(r"^:?-+:?$", c) for c in cells if c):
-                continue
-            parsed_rows.append(cells)
-        
-        table_buf = []
-        if not parsed_rows:
-            return
-
-        # Determine column widths
-        num_cols = max(len(r) for r in parsed_rows)
-        col_width = W / max(num_cols, 1)
-
-        table_data = []
-        for r_idx, row in enumerate(parsed_rows):
-            row_cells = []
-            is_header = (r_idx == 0)
-            style = s_th if is_header else s_td
-            for cell in row:
-                row_cells.append(make_paragraph(cell, style))
-            # Pad row if fewer cells than num_cols
-            while len(row_cells) < num_cols:
-                row_cells.append(make_paragraph("", style))
-            table_data.append(row_cells)
-
-        t = Table(table_data, colWidths=[col_width] * num_cols)
-        t_style = [
-            ("BACKGROUND", (0, 0), (-1, 0), INDIGO),
-            ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, BORDER),
-        ]
-        # Alternating row background
-        for i in range(1, len(table_data)):
-            if i % 2 == 0:
-                t_style.append(("BACKGROUND", (0, i), (-1, i), BG_TABLE))
-
-        t.setStyle(TableStyle(t_style))
-        story.append(Spacer(1, 4))
-        story.append(KeepTogether([t]))
-        story.append(Spacer(1, 8))
+    def safe_inline(text: str) -> str:
+        """Apply inline markdown formatting safely for ReportLab."""
+        text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        # Bold
+        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+        text = re.sub(r"__(.+?)__",     r"<b>\1</b>", text)
+        # Italic
+        text = re.sub(r"\*(.+?)\*",     r"<i>\1</i>", text)
+        text = re.sub(r"_(.+?)_",       r"<i>\1</i>", text)
+        # Inline code
+        text = re.sub(
+            r"`(.+?)`",
+            r'<font name="Courier" size="8" color="#4f46e5">\1</font>',
+            text,
+        )
+        return text
 
     def try_embed_chart(src: str) -> bool:
         """Try to embed a chart from the chart map into the story. Returns True if successful."""
@@ -365,7 +267,6 @@ def generate_pdf(
 
         # ── Code fence ────────────────────────────────────────────────────────
         if stripped.startswith("```"):
-            flush_table()
             if in_code:
                 flush_code()
             else:
@@ -376,13 +277,6 @@ def generate_pdf(
             code_buf.append(line)
             continue
 
-        # ── Table row ─────────────────────────────────────────────────────────
-        if stripped.startswith("|") and stripped.endswith("|"):
-            table_buf.append(stripped)
-            continue
-        else:
-            flush_table()
-
         # ── Horizontal rule ───────────────────────────────────────────────────
         if re.match(r"^-{3,}$|^\*{3,}$|^_{3,}$", stripped):
             story.append(HRFlowable(width=W, thickness=1, color=BORDER, spaceBefore=10, spaceAfter=10))
@@ -390,33 +284,33 @@ def generate_pdf(
 
         # ── Headings ──────────────────────────────────────────────────────────
         if stripped.startswith("#### "):
-            story.append(make_paragraph(stripped[5:], s_h3))
+            story.append(Paragraph(safe_inline(stripped[5:]), s_h3))
             continue
         if stripped.startswith("### "):
-            story.append(make_paragraph(stripped[4:], s_h3))
+            story.append(Paragraph(safe_inline(stripped[4:]), s_h3))
             continue
         if stripped.startswith("## "):
-            story.append(make_paragraph(stripped[3:], s_h2))
+            story.append(Paragraph(safe_inline(stripped[3:]), s_h2))
             continue
         if stripped.startswith("# "):
-            story.append(make_paragraph(stripped[2:], s_h1))
+            story.append(Paragraph(safe_inline(stripped[2:]), s_h1))
             continue
 
         # ── Bullet list ───────────────────────────────────────────────────────
         m = re.match(r"^[-*+]\s+(.*)", stripped)
         if m:
-            story.append(make_paragraph(m.group(1), s_bullet))
+            story.append(Paragraph(safe_inline(m.group(1)), s_bullet))
             continue
 
         # ── Numbered list ─────────────────────────────────────────────────────
         m = re.match(r"^\d+\.\s+(.*)", stripped)
         if m:
-            story.append(make_paragraph(m.group(1), s_bullet))
+            story.append(Paragraph(safe_inline(m.group(1)), s_bullet))
             continue
 
         # ── Blockquote ────────────────────────────────────────────────────────
         if stripped.startswith("> "):
-            story.append(make_paragraph(stripped[2:], s_quote))
+            story.append(Paragraph(safe_inline(stripped[2:]), s_quote))
             continue
 
         # ── Image / chart reference ───────────────────────────────────────────
@@ -425,7 +319,7 @@ def generate_pdf(
             alt, src = m.group(1), m.group(2)
             embedded = try_embed_chart(src)
             if embedded and alt:
-                story.append(make_paragraph(alt, s_caption))
+                story.append(Paragraph(alt, s_caption))
             continue
 
         # ── Blank line ────────────────────────────────────────────────────────
@@ -434,17 +328,19 @@ def generate_pdf(
             continue
 
         # ── Regular paragraph ─────────────────────────────────────────────────
-        story.append(make_paragraph(stripped, s_body))
+        try:
+            story.append(Paragraph(safe_inline(stripped), s_body))
+        except Exception:
+            story.append(Paragraph(stripped, s_body))
 
-    # Flush unclosed blocks
+    # Flush any unclosed code block
     if in_code:
         flush_code()
-    flush_table()
 
     # ── Footer rule ───────────────────────────────────────────────────────────
     story.append(Spacer(1, 20))
     story.append(HRFlowable(width=W, thickness=1, color=BORDER, spaceAfter=6))
-    story.append(make_paragraph(
+    story.append(Paragraph(
         "Generated by the <b>Autonomous Data Analyst Agent</b>",
         ps("RFooter", fontName="Helvetica", fontSize=8, textColor=MUTED, alignment=TA_CENTER),
     ))
@@ -453,4 +349,3 @@ def generate_pdf(
     NumberedCanvas = _make_page_number_canvas(Canvas)
     doc.build(story, canvasmaker=NumberedCanvas)
     return buffer.getvalue()
-
