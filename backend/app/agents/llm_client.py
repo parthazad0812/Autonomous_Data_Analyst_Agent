@@ -1,7 +1,7 @@
 """
 LLM client wrapper — returns a LangChain model with fallback chain.
-Primary model: Groq (llama-3.3-70b-versatile)
-Fallback model: Google Gemini (gemini-3.5-flash)
+Primary model: Google Gemini (gemini-3.5-flash)
+Fallback model: Groq (llama-3.3-70b-versatile)
 """
 
 import logging
@@ -16,26 +16,12 @@ logger = logging.getLogger(__name__)
 def _make_llm(temperature: float = 0.1) -> Any:
     """
     Build an LLM client with fallback chain:
-    1. Primary: Groq (llama-3.3-70b-versatile)
-    2. Fallback: Google Gemini (gemini-3.5-flash)
+    1. Primary: Google Gemini (gemini-3.5-flash)
+    2. Fallback: Groq (llama-3.3-70b-versatile)
     """
     candidates = []
 
-    # 1. Groq Primary: llama-3.3-70b-versatile
-    if settings.groq_api_key:
-        try:
-            candidates.append(
-                ChatGroq(
-                    model_name="llama-3.3-70b-versatile",
-                    groq_api_key=settings.groq_api_key,
-                    temperature=temperature,
-                    max_tokens=8192,
-                )
-            )
-        except Exception as e:
-            logger.warning(f"Could not init Groq llama-3.3-70b-versatile model: {e}")
-
-    # 2. Fallback: Google Gemini (gemini-3.5-flash)
+    # 1. Primary: Google Gemini (gemini-3.5-flash)
     if settings.gemini_api_key:
         try:
             candidates.append(
@@ -48,6 +34,20 @@ def _make_llm(temperature: float = 0.1) -> Any:
             )
         except Exception as e:
             logger.warning(f"Could not init Gemini model: {e}")
+
+    # 2. Fallback: Groq (llama-3.3-70b-versatile)
+    if settings.groq_api_key:
+        try:
+            candidates.append(
+                ChatGroq(
+                    model_name="llama-3.3-70b-versatile",
+                    groq_api_key=settings.groq_api_key,
+                    temperature=temperature,
+                    max_tokens=8192,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Could not init Groq llama-3.3-70b-versatile model: {e}")
 
     if not candidates:
         # Default fallback if no API keys are provided in environment
