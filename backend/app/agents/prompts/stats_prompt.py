@@ -23,7 +23,9 @@ ASSUMPTION CHECKS (always perform):
 AVAILABLE: pandas (pd), numpy (np), scipy.stats, statsmodels
 
 For each hypothesis test, print results clearly and output at the end:
-print("FINDINGS_JSON:" + json.dumps(findings_list))
+print("FINDINGS_JSON:" + _safe_json_dumps(findings_list))
+- CRITICAL: Use _safe_json_dumps() (available in the runtime) instead of json.dumps() — it handles numpy/pandas types automatically
+- Convert ALL numpy/pandas values to Python builtins: int(x), float(x), str(x) before adding to findings dicts
 
 Finding format for statistical results:
 {

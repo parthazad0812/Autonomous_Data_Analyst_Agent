@@ -25,7 +25,8 @@ AVAILABLE: matplotlib (plt), seaborn (sns), pandas (pd), numpy (np)
 `df` is already loaded. `save_chart` and `save_plotly` functions are available.
 
 For each chart you create, add its metadata to findings:
-print("FINDINGS_JSON:" + json.dumps(findings_list))
+print("FINDINGS_JSON:" + _safe_json_dumps(findings_list))
+- CRITICAL: Use _safe_json_dumps() (available in the runtime) instead of json.dumps() — it handles numpy/pandas types automatically
 
 Finding format:
 {

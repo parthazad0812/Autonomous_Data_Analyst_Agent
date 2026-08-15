@@ -34,6 +34,40 @@ except ImportError:
     pass
 warnings.filterwarnings('ignore')
 
+# ── Safe JSON serialization (handles numpy/pandas types) ──────────────────────
+class _NumpyPandasEncoder(json.JSONEncoder):
+    \"\"\"JSON encoder that converts numpy/pandas types to native Python types.\"\"\"
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            if np.isnan(obj) or np.isinf(obj):
+                return None
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (pd.Timestamp,)):
+            return obj.isoformat()
+        if isinstance(obj, (pd.Timedelta,)):
+            return str(obj)
+        if hasattr(obj, 'dtype'):
+            # Handles ObjectDType, CategoricalDtype, etc.
+            return str(obj)
+        if isinstance(obj, (set, frozenset)):
+            return list(obj)
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='replace')
+        try:
+            return str(obj)
+        except Exception:
+            return repr(obj)
+
+def _safe_json_dumps(obj):
+    \"\"\"JSON-serialize any object, converting numpy/pandas types automatically.\"\"\"
+    return json.dumps(obj, cls=_NumpyPandasEncoder, ensure_ascii=False)
+
 # ── Load dataset ──────────────────────────────────────────────────────────────
 _DATASET_PATH = {dataset_path!r}
 _CHARTS_DIR   = {charts_dir!r}
