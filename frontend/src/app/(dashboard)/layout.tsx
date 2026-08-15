@@ -62,12 +62,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ── Sidebar (desktop) ─────────────────────────────────────────── */}
       <aside className="w-64 border-r border-white/[0.04] bg-[#080808] hidden sm:flex flex-col shrink-0">
         {/* Logo */}
-        <div className="p-5 flex items-center gap-2.5">
+        <Link href="/dashboard" className="p-5 flex items-center gap-2.5 hover:opacity-75 transition-opacity">
           <div className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.06] flex items-center justify-center shrink-0">
             <Brain className="w-4 h-4 text-white" />
           </div>
           <span className="font-bold text-white tracking-tight text-[15px]">DataAnalyst AI</span>
-        </div>
+        </Link>
 
         {/* New Analysis CTA */}
         <div className="px-4 mb-6">
@@ -120,12 +120,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Drawer */}
           <div className="absolute left-0 top-0 bottom-0 w-64 bg-[#080808] border-r border-white/[0.06] flex flex-col animate-in">
             <div className="p-5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+              <Link href="/dashboard" className="flex items-center gap-2.5 hover:opacity-75 transition-opacity">
                 <div className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.06] flex items-center justify-center">
                   <Brain className="w-4 h-4 text-white" />
                 </div>
                 <span className="font-bold text-white tracking-tight text-[15px]">DataAnalyst AI</span>
-              </div>
+              </Link>
               <button onClick={() => setMobileOpen(false)} className="p-1.5 text-white/40 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
