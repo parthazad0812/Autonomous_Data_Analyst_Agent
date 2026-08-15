@@ -20,6 +20,8 @@ ASSUMPTION CHECKS (always perform):
 2. Homoscedasticity: Levene's test
 3. Sample size: note if n is too small for reliable inference
 
+IMPORTANT: The variable `df` is already loaded with the full dataset — do NOT load it yourself.
+Do NOT call pd.read_csv(), pd.read_excel(), or any file-loading function. Just use `df` directly.
 AVAILABLE: pandas (pd), numpy (np), scipy.stats, statsmodels
 
 For each hypothesis test, print results clearly and output at the end:
@@ -61,4 +63,4 @@ EDA Findings summary:
 
 User query: {user_query}
 
-Write rigorous statistical testing Python code. Output FINDINGS_JSON at the end."""
+Write rigorous statistical testing Python code. The variable `df` is already loaded — do NOT load it yourself. Output FINDINGS_JSON at the end."""
