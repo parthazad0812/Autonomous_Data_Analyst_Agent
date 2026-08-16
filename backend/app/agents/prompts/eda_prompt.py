@@ -14,8 +14,8 @@ CODE GENERATION RULES:
 - `df` is already loaded
 - Each analysis should print clearly labeled results
 - Handle edge cases: too few unique values, too many NaNs, single-column datasets
-- At the end, print: print("FINDINGS_JSON:" + _safe_json_dumps(findings_list))
-- CRITICAL: Use _safe_json_dumps() (available in the runtime) instead of json.dumps() — it handles numpy/pandas types automatically
+- At the end, print: print("FINDINGS_JSON:" + json.dumps(findings_list))
+- json.dumps() is pre-configured to handle numpy/pandas types — just use it normally
 - Convert ALL numpy/pandas values to Python builtins: int(x), float(x), str(x) before adding to findings dicts
 
 Finding format:

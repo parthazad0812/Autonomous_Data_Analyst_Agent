@@ -13,8 +13,8 @@ Available: pandas (pd), numpy (np), scipy.stats
 REQUIREMENTS:
 - Handle errors gracefully with try/except for each section
 - Print a clearly formatted summary of findings
-- Output a JSON dict at the very end like: print("FINDINGS_JSON:" + _safe_json_dumps(findings))
-- CRITICAL: Use _safe_json_dumps() (available in the runtime) instead of json.dumps() — it handles numpy/pandas types automatically
+- Output a JSON dict at the very end like: print("FINDINGS_JSON:" + json.dumps(findings))
+- json.dumps() is pre-configured to handle numpy/pandas types — just use it normally
 - Convert ALL numpy/pandas values to Python builtins: int(x), float(x), str(x) before adding to findings dicts
 - The findings list should have this structure for each finding:
   {"finding_id": "P001", "type": "profile", "title": "...", "description": "...", "evidence": {...}, "confidence": "high"}

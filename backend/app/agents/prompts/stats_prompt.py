@@ -25,8 +25,8 @@ Do NOT call pd.read_csv(), pd.read_excel(), or any file-loading function. Just u
 AVAILABLE: pandas (pd), numpy (np), scipy.stats, statsmodels
 
 For each hypothesis test, print results clearly and output at the end:
-print("FINDINGS_JSON:" + _safe_json_dumps(findings_list))
-- CRITICAL: Use _safe_json_dumps() (available in the runtime) instead of json.dumps() — it handles numpy/pandas types automatically
+print("FINDINGS_JSON:" + json.dumps(findings_list))
+- json.dumps() is pre-configured to handle numpy/pandas types — just use it normally
 - Convert ALL numpy/pandas values to Python builtins: int(x), float(x), str(x) before adding to findings dicts
 
 Finding format for statistical results:

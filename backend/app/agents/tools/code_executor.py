@@ -68,6 +68,14 @@ def _safe_json_dumps(obj):
     \"\"\"JSON-serialize any object, converting numpy/pandas types automatically.\"\"\"
     return json.dumps(obj, cls=_NumpyPandasEncoder, ensure_ascii=False)
 
+# Override json.dumps so even if the LLM uses json.dumps() it still works
+_original_json_dumps = json.dumps
+def _patched_json_dumps(obj, **kwargs):
+    kwargs.setdefault('cls', _NumpyPandasEncoder)
+    kwargs.setdefault('ensure_ascii', False)
+    return _original_json_dumps(obj, **kwargs)
+json.dumps = _patched_json_dumps
+
 # ── Load dataset ──────────────────────────────────────────────────────────────
 _DATASET_PATH = {dataset_path!r}
 _CHARTS_DIR   = {charts_dir!r}
