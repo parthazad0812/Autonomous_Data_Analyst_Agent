@@ -11,6 +11,7 @@ GENERATE PYTHON CODE that performs all the above. The variable `df` is already l
 Available: pandas (pd), numpy (np), scipy.stats
 
 REQUIREMENTS:
+- Keep code clean, concise, and focused (under 150 lines total) to avoid output truncation
 - Handle errors gracefully with try/except for each section
 - Print a clearly formatted summary of findings
 - Output a JSON dict at the very end like: print("FINDINGS_JSON:" + json.dumps(findings))

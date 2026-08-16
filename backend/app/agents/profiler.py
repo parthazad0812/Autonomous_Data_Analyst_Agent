@@ -37,19 +37,39 @@ def profiler_node(state: AnalysisState) -> AnalysisState:
         )
 
         llm = get_llm()
-        response = llm.invoke([
+        messages = [
             SystemMessage(content=PROFILER_SYSTEM),
             HumanMessage(content=user_msg),
-        ])
-        code = extract_code_block(extract_text_from_response(response.content).strip())
+        ]
 
-        exec_result = execute_python(
-            code=code,
-            dataset_local_path=dataset_path,
-            session_id=session_id,
-            charts_dir=charts_dir,
-            timeout=120,
-        )
+        code = ""
+        exec_result = {"success": False, "stdout": "", "stderr": "", "chart_files": []}
+        max_attempts = 3
+
+        for attempt in range(max_attempts):
+            response = llm.invoke(messages)
+            raw_content = extract_text_from_response(response.content).strip()
+            code = extract_code_block(raw_content)
+
+            exec_result = execute_python(
+                code=code,
+                dataset_local_path=dataset_path,
+                session_id=session_id,
+                charts_dir=charts_dir,
+                timeout=120,
+            )
+
+            if exec_result["success"]:
+                break
+
+            if attempt < max_attempts - 1:
+                messages.append(response)
+                fix_prompt = (
+                    f"The code execution failed with the following error:\n\n{exec_result['stderr']}\n\n"
+                    "Please fix the code. Keep it concise, focused, and under 150 lines. "
+                    "Ensure all syntax is valid, all brackets/parentheses/quotes are properly closed, and return ONLY the complete corrected Python code."
+                )
+                messages.append(HumanMessage(content=fix_prompt))
 
         raw_findings = parse_findings_from_output(exec_result["stdout"])
         new_findings = [normalise_finding(f, agent_name, i + 1) for i, f in enumerate(raw_findings)]
