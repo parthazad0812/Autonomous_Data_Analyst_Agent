@@ -235,9 +235,11 @@ def generate_pdf(
         # Bold
         text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
         text = re.sub(r"__(.+?)__",     r"<b>\1</b>", text)
-        # Italic
-        text = re.sub(r"\*(.+?)\*",     r"<i>\1</i>", text)
-        text = re.sub(r"_(.+?)_",       r"<i>\1</i>", text)
+        # Italic — use [^<>]+? so the match cannot span across <b>/<i> tags
+        # that were just inserted above, preventing overlapping HTML like
+        # <b>...<i>...</b>...</i> which crashes ReportLab's parser.
+        text = re.sub(r"\*([^<>]+?)\*",     r"<i>\1</i>", text)
+        text = re.sub(r"(?<!\w)_([^<>]+?)_(?!\w)", r"<i>\1</i>", text)
         # Inline code
         text = re.sub(
             r"`(.+?)`",
@@ -245,6 +247,18 @@ def generate_pdf(
             text,
         )
         return text
+
+    def _safe_paragraph(text: str, style) -> Paragraph:
+        """Create a Paragraph with proper fallback on parse errors."""
+        try:
+            return Paragraph(safe_inline(text), style)
+        except Exception:
+            # Fallback: strip all markdown formatting, keep only escaped text
+            plain = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            try:
+                return Paragraph(plain, style)
+            except Exception:
+                return Paragraph("[content could not be rendered]", style)
 
     def try_embed_chart(src: str) -> bool:
         """Try to embed a chart from the chart map into the story. Returns True if successful."""
@@ -284,33 +298,33 @@ def generate_pdf(
 
         # ── Headings ──────────────────────────────────────────────────────────
         if stripped.startswith("#### "):
-            story.append(Paragraph(safe_inline(stripped[5:]), s_h3))
+            story.append(_safe_paragraph(stripped[5:], s_h3))
             continue
         if stripped.startswith("### "):
-            story.append(Paragraph(safe_inline(stripped[4:]), s_h3))
+            story.append(_safe_paragraph(stripped[4:], s_h3))
             continue
         if stripped.startswith("## "):
-            story.append(Paragraph(safe_inline(stripped[3:]), s_h2))
+            story.append(_safe_paragraph(stripped[3:], s_h2))
             continue
         if stripped.startswith("# "):
-            story.append(Paragraph(safe_inline(stripped[2:]), s_h1))
+            story.append(_safe_paragraph(stripped[2:], s_h1))
             continue
 
         # ── Bullet list ───────────────────────────────────────────────────────
         m = re.match(r"^[-*+]\s+(.*)", stripped)
         if m:
-            story.append(Paragraph(safe_inline(m.group(1)), s_bullet))
+            story.append(_safe_paragraph(m.group(1), s_bullet))
             continue
 
         # ── Numbered list ─────────────────────────────────────────────────────
         m = re.match(r"^\d+\.\s+(.*)", stripped)
         if m:
-            story.append(Paragraph(safe_inline(m.group(1)), s_bullet))
+            story.append(_safe_paragraph(m.group(1), s_bullet))
             continue
 
         # ── Blockquote ────────────────────────────────────────────────────────
         if stripped.startswith("> "):
-            story.append(Paragraph(safe_inline(stripped[2:]), s_quote))
+            story.append(_safe_paragraph(stripped[2:], s_quote))
             continue
 
         # ── Image / chart reference ───────────────────────────────────────────
@@ -328,10 +342,7 @@ def generate_pdf(
             continue
 
         # ── Regular paragraph ─────────────────────────────────────────────────
-        try:
-            story.append(Paragraph(safe_inline(stripped), s_body))
-        except Exception:
-            story.append(Paragraph(stripped, s_body))
+        story.append(_safe_paragraph(stripped, s_body))
 
     # Flush any unclosed code block
     if in_code:
