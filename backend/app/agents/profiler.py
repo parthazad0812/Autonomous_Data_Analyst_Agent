@@ -63,7 +63,8 @@ def profiler_node(state: AnalysisState) -> AnalysisState:
                 break
 
             if attempt < max_attempts - 1:
-                messages.append(response)
+                # keep only the latest failed attempt: bounded prompt size, fewer tokens per retry
+                messages = messages[:2] + [response]
                 fix_prompt = (
                     f"The code execution failed with the following error:\n\n{exec_result['stderr']}\n\n"
                     "Please fix the code. Keep it concise, focused, and under 150 lines. "

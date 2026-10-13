@@ -186,13 +186,13 @@ def _persist_report(session_id: str, markdown: str, chart_paths: list):
     _db_retry(_run)
 
 
-def _finalise_session(session_id: str, analysis_plan: dict):
-    """Open a fresh session, mark session completed, commit, close."""
+def _finalise_session(session_id: str, analysis_plan: dict, status: str = "completed"):
+    """Open a fresh session, mark session completed (or failed), commit, close."""
     def _run():
         db = SessionLocal()
         try:
             db.query(AnalysisSession).filter(AnalysisSession.id == session_id).update({
-                "status": "completed",
+                "status": status,
                 "completed_at": datetime.now(timezone.utc),
                 "analysis_plan": analysis_plan,
             })
@@ -203,6 +203,14 @@ def _finalise_session(session_id: str, analysis_plan: dict):
         finally:
             db.close()
     _db_retry(_run)
+
+
+ANALYSIS_AGENTS = {"profiler", "eda", "statistician", "visualizer"}
+
+
+def _any_analysis_step_succeeded(steps: list[dict]) -> bool:
+    """True if at least one data-analysis agent (not just planning/reporting) completed."""
+    return any(s.get("agent_name") in ANALYSIS_AGENTS and s.get("status") == "completed" for s in steps)
 
 
 def _fail_session(session_id: str):
@@ -335,6 +343,16 @@ def run_analysis(session_id: str) -> None:
                 _publish(session_id, "reporter", "warning", f"Could not persist report: {e}")
 
         # ── 9. Finalise session (fresh session) ────────────────────────────────
+        # A run where no analysis step succeeded (e.g. all LLM providers unavailable)
+        # is a failure, even though a plan and a fallback report were written.
+        steps = final_state.get("step_records", [])
+        if steps and not _any_analysis_step_succeeded(steps):
+            _finalise_session(session_id, final_state.get("analysis_plan", {}), status="failed")
+            errors = {s.get("error_message", "")[:200] for s in steps if s.get("error_message")}
+            _publish(session_id, "orchestrator", "failed",
+                     "Analysis failed: no analysis step succeeded. " + " | ".join(errors))
+            return
+
         _finalise_session(session_id, final_state.get("analysis_plan", {}))
 
         _publish(session_id, "reporter", "completed",

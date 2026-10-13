@@ -15,6 +15,37 @@ from app.agents.tools.code_executor import execute_python
 from app.agents.tools.data_tools import upload_chart_to_minio
 
 
+def _link_charts_to_findings(findings: list[FindingRecord], uploaded_paths: list[str]) -> list[FindingRecord]:
+    """
+    The LLM labels charts by id ("V001"), but the API, UI and PDF need the MinIO path
+    ("charts/<session>/V001.png"). Match by file stem, then assign leftovers in order;
+    any uploaded chart without a finding gets a minimal visualization finding.
+    """
+    by_stem = {os.path.splitext(os.path.basename(p))[0]: p for p in uploaded_paths}
+    unused = list(uploaded_paths)
+    viz = [f for f in findings if f["finding_type"] == "visualization"]
+
+    for f in viz:
+        key = os.path.splitext(os.path.basename(f["visualization_path"] or ""))[0]
+        path = by_stem.get(key) or by_stem.get(f["finding_id"])
+        if path and path in unused:
+            f["visualization_path"] = path
+            unused.remove(path)
+
+    for f in viz:
+        if not (f["visualization_path"] or "").startswith("charts/") and unused:
+            f["visualization_path"] = unused.pop(0)
+
+    for path in unused:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        findings.append(FindingRecord(
+            finding_id=stem, agent_name="visualizer", finding_type="visualization",
+            title=f"Chart {stem}", description="", evidence={"chart_id": stem},
+            confidence="medium", hypothesis="", visualization_path=path,
+        ))
+    return findings
+
+
 def visualizer_node(state: AnalysisState) -> AnalysisState:
     """Generate visualizations for key findings and store them in MinIO."""
     start = time.time()
@@ -69,10 +100,12 @@ def visualizer_node(state: AnalysisState) -> AnalysisState:
             
             # If code execution failed (e.g. SyntaxError, KeyError), append assistant response & error message to retry
             if attempt < max_attempts - 1:
-                messages.append(response)
+                # keep only the latest failed attempt: bounded prompt size, fewer tokens per retry
+                messages = messages[:2] + [response]
                 fix_prompt = (
                     f"The code execution failed with the following error:\n\n{exec_result['stderr']}\n\n"
-                    "Please fix the code (ensure all parentheses, brackets, quotes are closed, column names match the dataset, and syntax is valid) and return ONLY the complete corrected Python code."
+                    "Please fix the code. Keep it concise, focused, and under 150 lines (long code gets truncated). "
+                    "Ensure all parentheses, brackets, quotes are closed, column names match the dataset, and syntax is valid, and return ONLY the complete corrected Python code."
                 )
                 messages.append(HumanMessage(content=fix_prompt))
 
@@ -89,6 +122,7 @@ def visualizer_node(state: AnalysisState) -> AnalysisState:
         # Parse visualization findings
         raw_findings = parse_findings_from_output(exec_result["stdout"])
         new_findings = [normalise_finding(f, agent_name, i + 1) for i, f in enumerate(raw_findings)]
+        new_findings = _link_charts_to_findings(new_findings, uploaded_paths)
 
         step = make_step_record(
             agent_name=agent_name,

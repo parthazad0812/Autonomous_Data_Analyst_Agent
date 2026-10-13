@@ -4,6 +4,7 @@ with a hard timeout. Captures stdout/stderr and any chart files written
 to a temp directory.
 """
 
+import ast
 import os
 import sys
 import json
@@ -121,6 +122,28 @@ print(f"[OK] Dataset loaded: {{df.shape[0]}} rows x {{df.shape[1]}} cols")
 """
 
 
+_PROTECTED_HELPERS = {"save_chart", "save_plotly"}
+
+
+def _strip_helper_redefinitions(code: str) -> str:
+    """
+    LLMs sometimes redefine save_chart/save_plotly (e.g. to save into "output/charts/"),
+    which shadows the preamble helpers and puts the PNGs where they are never uploaded.
+    Remove such top-level definitions so the sandbox helpers are always used.
+    Code that does not parse is returned unchanged (execution will report the error).
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return code
+    kept = [n for n in tree.body
+            if not (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in _PROTECTED_HELPERS)]
+    if len(kept) == len(tree.body):
+        return code
+    tree.body = kept
+    return ast.unparse(tree)
+
+
 def execute_python(
     code: str,
     dataset_local_path: str,
@@ -148,7 +171,7 @@ def execute_python(
         charts_dir=charts_dir,
         session_id=session_id,
     ))
-    full_script = preamble + "\n" + code
+    full_script = preamble + "\n" + _strip_helper_redefinitions(code)
 
     # Write to a temp file
     with tempfile.NamedTemporaryFile(
@@ -165,10 +188,14 @@ def execute_python(
             text=True,
             timeout=timeout,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            # Relative paths in generated code resolve inside the session's chart folder,
+            # never inside the backend source tree.
+            cwd=charts_dir,
         )
         duration = time.time() - start
 
-        # Collect any chart files written during execution
+        # Collect any chart files written during execution (PNGs also from subfolders,
+        # e.g. code that saved to "output/charts/x.png" relative to the working dir)
         chart_files = []
         if os.path.isdir(charts_dir):
             chart_files = [
@@ -176,6 +203,7 @@ def execute_python(
                 for f in os.listdir(charts_dir)
                 if f.endswith((".png", ".json"))
             ]
+            chart_files += [str(p) for p in Path(charts_dir).rglob("*.png") if p.parent != Path(charts_dir)]
 
         return {
             "success": result.returncode == 0,

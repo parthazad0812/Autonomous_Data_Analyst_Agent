@@ -37,7 +37,7 @@ def orchestrator_node(state: AnalysisState) -> AnalysisState:
             dataset_filename=state.get("dataset_filename", "dataset"),
         )
 
-        llm = get_llm()
+        llm = get_llm(light=True)  # simple JSON plan: lighter model, separate quota
         response = llm.invoke([
             SystemMessage(content=ORCHESTRATOR_SYSTEM),
             HumanMessage(content=user_msg),

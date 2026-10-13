@@ -94,9 +94,12 @@ def generate_pdf(
     filename: str = "dataset",
     findings_count: int = 0,
     chart_paths: list[str] | None = None,
+    chart_titles: dict[str, str] | None = None,
 ) -> bytes:
     """
     Convert a Markdown report into a styled PDF using ReportLab.
+    Charts referenced in the Markdown are embedded inline; any chart in chart_paths
+    the Markdown did not reference is appended in a "Charts" section.
     Returns raw PDF bytes.
     """
     from reportlab.lib.pagesizes import A4
@@ -111,7 +114,11 @@ def generate_pdf(
     from reportlab.pdfgen.canvas import Canvas
 
     chart_paths = chart_paths or []
+    chart_titles = chart_titles or {}
     chart_map = _build_chart_map(chart_paths)
+    # chart_map is keyed by both full path and file name; map each key back to its path
+    key_to_path = {k: p for p in chart_paths for k in (p, p.split("/")[-1])}
+    embedded_paths: set[str] = set()  # charts already placed in the story
 
     # ── Colour palette ────────────────────────────────────────────────────────
     INDIGO    = colors.HexColor("#4f46e5")
@@ -262,7 +269,10 @@ def generate_pdf(
 
     def try_embed_chart(src: str) -> bool:
         """Try to embed a chart from the chart map into the story. Returns True if successful."""
-        for key, data in chart_map.items():
+        if not src:
+            return False
+        exact = [(src, chart_map[src])] if src in chart_map else []
+        for key, data in exact + list(chart_map.items()):
             if key in src or src in key:
                 try:
                     img_buf = io.BytesIO(data)
@@ -271,6 +281,7 @@ def generate_pdf(
                     story.append(Spacer(1, 8))
                     story.append(KeepTogether([img]))
                     story.append(Spacer(1, 4))
+                    embedded_paths.add(key_to_path.get(key, key))
                     return True
                 except Exception:
                     pass
@@ -310,6 +321,18 @@ def generate_pdf(
             story.append(_safe_paragraph(stripped[2:], s_h1))
             continue
 
+        # ── Image / chart reference (anywhere in the line, e.g. inside a bullet) ─
+        m = re.search(r"!\[([^\]]*)\]\(([^)]+)\)", stripped)
+        if m:
+            alt, src = m.group(1), m.group(2)
+            embedded = try_embed_chart(src)
+            if embedded and alt:
+                story.append(Paragraph(alt, s_caption))
+            rest = (stripped[:m.start()] + stripped[m.end():]).strip(" -*+–—:")
+            if rest:
+                story.append(_safe_paragraph(rest, s_bullet))
+            continue
+
         # ── Bullet list ───────────────────────────────────────────────────────
         m = re.match(r"^[-*+]\s+(.*)", stripped)
         if m:
@@ -327,15 +350,6 @@ def generate_pdf(
             story.append(_safe_paragraph(stripped[2:], s_quote))
             continue
 
-        # ── Image / chart reference ───────────────────────────────────────────
-        m = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)", stripped)
-        if m:
-            alt, src = m.group(1), m.group(2)
-            embedded = try_embed_chart(src)
-            if embedded and alt:
-                story.append(Paragraph(alt, s_caption))
-            continue
-
         # ── Blank line ────────────────────────────────────────────────────────
         if not stripped:
             story.append(Spacer(1, 6))
@@ -347,6 +361,15 @@ def generate_pdf(
     # Flush any unclosed code block
     if in_code:
         flush_code()
+
+    # ── Charts the report text never referenced ───────────────────────────────
+    remaining = [p for p in chart_paths if p in chart_map and p not in embedded_paths]
+    if remaining:
+        story.append(Paragraph("Charts", s_h2))
+        for path in remaining:
+            if try_embed_chart(path):
+                caption = chart_titles.get(path) or path.rsplit("/", 1)[-1]
+                story.append(_safe_paragraph(caption, s_caption))
 
     # ── Footer rule ───────────────────────────────────────────────────────────
     story.append(Spacer(1, 20))

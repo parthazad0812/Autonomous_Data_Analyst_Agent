@@ -44,6 +44,14 @@ REPORT STRUCTURE (use exactly this Markdown format):
 2. [Recommendation 2]
 ...
 
+DATA-GROUNDING RULES (most important):
+- Every number about the dataset itself (row/column counts, missing values, min/max/mean/median,
+  top values) MUST be copied from VERIFIED DATASET STATISTICS. Never estimate or invent them.
+- Test statistics, p-values and effect sizes MUST come from the findings' evidence.
+- If a number you want is not provided, describe the result qualitatively instead of guessing.
+- Embed charts only from AVAILABLE CHARTS, as Markdown images on their own line:
+  ![Chart title](V001.png). Never reference any other chart file name.
+
 WRITING RULES:
 1. NEVER use jargon without defining it
 2. EVERY claim must cite a specific finding or test result
@@ -55,13 +63,20 @@ WRITING RULES:
 
 REPORT_USER_TEMPLATE = """Dataset: {dataset_filename}
 Shape: {rows} rows x {columns} columns
+Generated: {generated}
 Analysis Duration: {duration}
 User Query: {user_query}
 
-All Findings:
+VERIFIED DATASET STATISTICS (computed directly from the data with pandas):
+{verified_stats}
+
+AVAILABLE CHARTS:
+{charts_text}
+
+Findings (profiling, EDA, visualization) with evidence:
 {all_findings_text}
 
-Statistical Results:
+Statistical Results with evidence:
 {stats_summary}
 
-Write a complete analytical report in the specified Markdown format. Be specific with numbers. Make it professional and insightful."""
+Write a complete analytical report in the specified Markdown format. Be specific with numbers, using only the numbers provided above. Make it professional and insightful."""
