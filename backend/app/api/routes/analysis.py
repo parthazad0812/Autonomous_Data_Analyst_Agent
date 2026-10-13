@@ -26,7 +26,7 @@ from app.models.report import Report
 from app.api.dependencies import get_current_user
 from app.services.analysis_service import run_analysis
 from app.services.report_service import generate_pdf
-from app.services.minio_service import get_presigned_url
+from app.services.minio_service import get_presigned_url, list_session_charts
 from app.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -101,6 +101,40 @@ def _get_session_or_404(
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     return session
+
+
+def _session_charts(session_id: str, db: Session) -> tuple[list[str], dict[str, str]]:
+    """
+    Every chart for a session: paths linked from visualization findings plus every PNG
+    actually stored in MinIO (charts whose finding is missing or lacks a "charts/" path
+    would otherwise never reach the UI or the PDF). Returns (paths, {path: title}).
+    """
+    viz_findings = (
+        db.query(Finding)
+        .filter(Finding.session_id == session_id, Finding.finding_type == "visualization")
+        .all()
+    )
+    titles: dict[str, str] = {}
+    titles_by_stem: dict[str, str] = {}
+    for f in viz_findings:
+        path = f.visualization_path or ""
+        if path.startswith("charts/"):
+            titles[path] = f.title
+        elif path:  # legacy findings stored just the chart id, e.g. "V001"
+            titles_by_stem[path.rsplit("/", 1)[-1].rsplit(".", 1)[0]] = f.title
+
+    paths = list(titles)
+    try:
+        stored = list_session_charts(session_id)
+    except Exception as exc:
+        log.warning("Could not list charts in MinIO", session_id=session_id, error=str(exc))
+        stored = []
+    for p in stored:
+        if p not in titles:
+            paths.append(p)
+            stem = p.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            titles[p] = titles_by_stem.get(stem, stem)
+    return paths, titles
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -241,25 +275,14 @@ def get_chart_urls(
     """Return presigned MinIO URLs for all charts generated for this session."""
     _get_session_or_404(session_id, db, current_user)
 
-    # Charts are stored as findings with type=visualization
-    viz_findings = (
-        db.query(Finding)
-        .filter(
-            Finding.session_id == session_id,
-            Finding.finding_type == "visualization",
-        )
-        .all()
-    )
-
+    paths, _ = _session_charts(session_id, db)
     chart_urls = []
-    for f in viz_findings:
-        path = f.visualization_path or ""
-        if path and path.startswith("charts/"):
-            try:
-                url = get_presigned_url(path, expires_hours=2)
-                chart_urls.append(ChartURL(path=path, url=url))
-            except Exception:
-                pass
+    for path in paths:
+        try:
+            url = get_presigned_url(path, expires_hours=2)
+            chart_urls.append(ChartURL(path=path, url=url))
+        except Exception:
+            pass
 
     return chart_urls
 
@@ -314,19 +337,8 @@ def download_report_pdf(
     session = db.query(AnalysisSession).filter(AnalysisSession.id == session_id).first()
     findings_count = db.query(Finding).filter(Finding.session_id == session_id).count()
 
-    # Gather chart paths from visualization findings
-    viz_findings = (
-        db.query(Finding)
-        .filter(
-            Finding.session_id == session_id,
-            Finding.finding_type == "visualization",
-        )
-        .all()
-    )
-    chart_paths = [
-        f.visualization_path for f in viz_findings
-        if f.visualization_path and f.visualization_path.startswith("charts/")
-    ]
+    # Every chart for the session: linked from findings and/or stored in MinIO
+    chart_paths, chart_titles = _session_charts(session_id, db)
 
     stem = (session.dataset_filename or "report").rsplit(".", 1)[0]
     title = session.title or f"{session.dataset_filename} Analysis Report"
@@ -339,6 +351,7 @@ def download_report_pdf(
             filename=session.dataset_filename or "dataset",
             findings_count=findings_count,
             chart_paths=chart_paths,
+            chart_titles=chart_titles,
         )
     except Exception as exc:
         raise HTTPException(

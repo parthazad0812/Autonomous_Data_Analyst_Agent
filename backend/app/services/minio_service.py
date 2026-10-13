@@ -62,6 +62,13 @@ def delete_file_from_minio(object_name: str) -> None:
         pass
 
 
+def list_session_charts(session_id: str) -> list[str]:
+    """Return the object names of every PNG chart stored for a session, sorted."""
+    client = get_minio_client()
+    objects = client.list_objects(settings.minio_bucket, prefix=f"charts/{session_id}/", recursive=True)
+    return sorted(o.object_name for o in objects if o.object_name.lower().endswith(".png"))
+
+
 def get_presigned_url(object_name: str, expires_hours: int = 1) -> str:
     """Generate a presigned GET URL for temporary access."""
     client = get_minio_client()

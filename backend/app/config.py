@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     default_llm_provider: str = "gemini"
     default_model: str = "gemini-3.5-flash"
+    # Small planning calls (orchestrator) use a lighter Gemini model, which has its
+    # own free-tier quota bucket, so they don't spend the main model's daily requests.
+    gemini_light_model: str = "gemini-3.5-flash-lite"
+    # Fallback when Gemini is unavailable or out of quota.
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_tpm_limit: int = 8000  # Groq free-tier tokens/minute (prompt + max_tokens per request)
+    # After a Gemini *daily* quota error, skip Gemini for this many seconds.
+    gemini_quota_cooldown_seconds: int = 3600
 
     # ── Database ─────────────────────────────────────────────────────────────
     database_url: str = "postgresql://analyst:analyst_password@localhost:5432/data_analyst"
